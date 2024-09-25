@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_windows/webview_windows.dart';
 
@@ -19,36 +21,44 @@ class RequestCode {
       : _config = config,
         _authorizationRequest = AuthorizationRequest(config),
         _redirectUriHost = Uri.parse(config.redirectUri).host {
-    _navigationDelegate = NavigationDelegate(
-      onNavigationRequest: _onNavigationRequest,
-    );
-    _cookieManager = WebViewCookieManager();
+    if (!Platform.isWindows) {
+      _navigationDelegate = NavigationDelegate(
+        onNavigationRequest: _onNavigationRequest,
+      );
+      _cookieManager = WebViewCookieManager();
+    }
   }
 
   Future<String?> requestCodeWindows() async {
     _code = null;
-
-    final urlParams = _constructUrlParams();
     final controller = WebviewController();
-    await controller.initialize();
-    controller.url.listen((url) async {
-      var uri = Uri.parse(url);
 
-      if (uri.queryParameters['error'] != null) {
-        _config.navigatorKey.currentState!.pop();
-      }
+    try {
+      final urlParams = _constructUrlParams();
+      await controller.initialize();
+      controller.url.listen((url) async {
+        var uri = Uri.parse(url);
 
-      var checkHost = uri.host == _redirectUriHost;
-
-      if (uri.queryParameters['code'] != null && checkHost) {
-        _code = uri.queryParameters['code'];
-        if (_config.onPageFinished != null) {
-          _config.onPageFinished?.call(_code!);
+        if (uri.queryParameters['error'] != null) {
+          _config.navigatorKey.currentState?.pop();
         }
-        _config.navigatorKey.currentState!.pop();
-      }
-    });
-    controller.loadUrl("${_authorizationRequest.url}?$urlParams");
+
+        var checkHost = uri.host == _redirectUriHost;
+
+        if (uri.queryParameters['code'] != null && checkHost) {
+          _code = uri.queryParameters['code'];
+          if (_config.onPageFinished != null) {
+            _config.onPageFinished?.call(_code!);
+          }
+          _config.navigatorKey.currentState!.pop();
+        }
+      });
+      controller.loadUrl("${_authorizationRequest.url}?$urlParams");
+    } on PlatformException catch (e) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        throw Exception(e.message);
+      });
+    }
 
     final webView = Webview(controller);
 
@@ -67,11 +77,12 @@ class RequestCode {
           appBar: _config.appBar,
           body: PopScope(
             canPop: false,
-            onPopInvoked: (bool didPop) async {
+            onPopInvokedWithResult: (bool didPop, _) async {
               if (didPop) return;
-
               final NavigatorState navigator = Navigator.of(context);
-              navigator.pop();
+              if (navigator.canPop()) {
+                navigator.pop();
+              }
             },
             child: SafeArea(
               child: Stack(
@@ -163,7 +174,9 @@ class RequestCode {
   }
 
   Future<void> clearCookies() async {
-    await _cookieManager.clearCookies();
+    if (!Platform.isWindows) {
+      await _cookieManager.clearCookies();
+    }
   }
 
   String _constructUrlParams() => _mapToQueryParams(

@@ -173,11 +173,15 @@ class MobileOAuth extends CoreOAuth {
   }
 
   Future<void> _removeOldTokenOnFirstLogin() async {
-    var prefs = await SharedPreferences.getInstance();
-    final keyFreshInstall = 'freshInstall';
-    if (!prefs.getKeys().contains(keyFreshInstall)) {
-      await logout();
-      await prefs.setBool(keyFreshInstall, false);
+    try {
+      var prefs = await SharedPreferences.getInstance();
+      final keyFreshInstall = 'freshInstall';
+      if (!prefs.getKeys().contains(keyFreshInstall)) {
+        await logout();
+        await prefs.setBool(keyFreshInstall, false);
+      }
+    } catch (e, stacktrace) {
+      print("ERROR $e || $stacktrace");
     }
   }
 }
