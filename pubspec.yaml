@@ -9,15 +9,16 @@ environment:
   flutter: ">=3.13.0" # Because of PopScope at least Flutter 3.13 is required to run aad_oauth >=1.0.1
 
 dependencies:
+  dartz: ^0.10.1
+  equatable: ^2.0.5
   flutter:
     sdk: flutter
   flutter_secure_storage: ^9.0.0
-  webview_flutter: ^4.4.1
-  js: ^0.6.7
   http: ^1.1.0
+  js: ^0.6.7
   shared_preferences: ^2.2.1
-  dartz: ^0.10.1
-  equatable: ^2.0.5
+  webview_flutter: ^4.4.1
+  webview_windows: ^0.4.0
 
 dev_dependencies:
   flutter_test:

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:aad_oauth/helper/core_oauth.dart';
 import 'package:aad_oauth/model/config.dart';
@@ -159,7 +160,9 @@ class MobileOAuth extends CoreOAuth {
 
   /// Authorize user via refresh token or web gui if necessary.
   Future<Either<Failure, Token>> _performFullAuthFlow() async {
-    var code = await _requestCode.requestCode();
+    var code = Platform.isWindows
+        ? await _requestCode.requestCodeWindows()
+        : await _requestCode.requestCode();
     if (code == null) {
       return Left(AadOauthFailure(
         errorType: ErrorType.accessDeniedOrAuthenticationCanceled,
@@ -170,11 +173,15 @@ class MobileOAuth extends CoreOAuth {
   }
 
   Future<void> _removeOldTokenOnFirstLogin() async {
-    var prefs = await SharedPreferences.getInstance();
-    final keyFreshInstall = 'freshInstall';
-    if (!prefs.getKeys().contains(keyFreshInstall)) {
-      await logout();
-      await prefs.setBool(keyFreshInstall, false);
+    try {
+      var prefs = await SharedPreferences.getInstance();
+      final keyFreshInstall = 'freshInstall';
+      if (!prefs.getKeys().contains(keyFreshInstall)) {
+        await logout();
+        await prefs.setBool(keyFreshInstall, false);
+      }
+    } catch (e, stacktrace) {
+      print("ERROR $e || $stacktrace");
     }
   }
 }
