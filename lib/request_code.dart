@@ -15,6 +15,7 @@ class RequestCode {
   final String _redirectUriHost;
   late NavigationDelegate _navigationDelegate;
   late WebViewCookieManager _cookieManager;
+  late final WebviewController webViewWindowsController;
   String? _code;
 
   RequestCode(Config config)
@@ -26,17 +27,17 @@ class RequestCode {
         onNavigationRequest: _onNavigationRequest,
       );
       _cookieManager = WebViewCookieManager();
+    } else {
+      webViewWindowsController = WebviewController();
+      webViewWindowsController.initialize();
     }
   }
 
   Future<String?> requestCodeWindows() async {
     _code = null;
-    final controller = WebviewController();
-
     try {
       final urlParams = _constructUrlParams();
-      await controller.initialize();
-      controller.url.listen((url) async {
+      webViewWindowsController.url.listen((url) async {
         var uri = Uri.parse(url);
 
         if (uri.queryParameters['error'] != null) {
@@ -53,14 +54,15 @@ class RequestCode {
           _config.navigatorKey.currentState!.pop();
         }
       });
-      controller.loadUrl("${_authorizationRequest.url}?$urlParams");
+      webViewWindowsController
+          .loadUrl("${_authorizationRequest.url}?$urlParams");
     } on PlatformException catch (e) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         throw Exception(e.message);
       });
     }
 
-    final webView = Webview(controller);
+    final webView = Webview(webViewWindowsController);
 
     if (_config.navigatorKey.currentState == null) {
       throw Exception(
@@ -94,6 +96,11 @@ class RequestCode {
       ),
     );
     return _code;
+  }
+
+  Future clearCookiesWindows() async {
+    await webViewWindowsController.clearCookies();
+    await webViewWindowsController.clearCache();
   }
 
   Future<String?> requestCode() async {
@@ -176,6 +183,8 @@ class RequestCode {
   Future<void> clearCookies() async {
     if (!Platform.isWindows) {
       await _cookieManager.clearCookies();
+    } else {
+      await clearCookiesWindows();
     }
   }
 

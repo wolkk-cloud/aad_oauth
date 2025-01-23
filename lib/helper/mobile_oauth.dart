@@ -38,8 +38,8 @@ class MobileOAuth extends CoreOAuth {
   /// both access and refresh tokens are invalid, the web gui will be used.
   @override
   Future<Either<Failure, Token>> login(
-      {bool refreshIfAvailable = false}) async {
-    await _removeOldTokenOnFirstLogin();
+      {bool refreshIfAvailable = false, bool clearCookies = false}) async {
+    await _removeOldTokenOnFirstLogin(clearCookies: clearCookies);
     return await _authorization(refreshIfAvailable: refreshIfAvailable);
   }
 
@@ -172,13 +172,16 @@ class MobileOAuth extends CoreOAuth {
     return await _requestToken.requestToken(code);
   }
 
-  Future<void> _removeOldTokenOnFirstLogin() async {
+  Future<void> _removeOldTokenOnFirstLogin({required bool clearCookies}) async {
     try {
       var prefs = await SharedPreferences.getInstance();
       final keyFreshInstall = 'freshInstall';
       if (!prefs.getKeys().contains(keyFreshInstall)) {
         await logout();
         await prefs.setBool(keyFreshInstall, false);
+      }
+      if (Platform.isWindows && clearCookies) {
+        await _requestCode.clearCookiesWindows();
       }
     } catch (e, stacktrace) {
       print("ERROR $e || $stacktrace");
