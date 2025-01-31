@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+// import 'package:flutter/services.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_windows/webview_windows.dart';
 
 import 'model/config.dart';
 import 'request/authorization_request.dart';
@@ -15,54 +15,92 @@ class RequestCode {
   final String _redirectUriHost;
   late NavigationDelegate _navigationDelegate;
   late WebViewCookieManager _cookieManager;
-  late final WebviewController webViewWindowsController;
+  late CookieManager cookieManagerWindows;
+  late final InAppWebViewController webViewWindowsController;
   String? _code;
+  late TextEditingController _inputController;
 
   RequestCode(Config config)
       : _config = config,
         _authorizationRequest = AuthorizationRequest(config),
         _redirectUriHost = Uri.parse(config.redirectUri).host {
-    if (!Platform.isWindows) {
+    if (!(Platform.isWindows || Platform.isMacOS)) {
       _navigationDelegate = NavigationDelegate(
         onNavigationRequest: _onNavigationRequest,
       );
       _cookieManager = WebViewCookieManager();
     } else {
-      webViewWindowsController = WebviewController();
-      webViewWindowsController.initialize();
+      cookieManagerWindows = CookieManager();
+      _inputController = _config.textInputController;
     }
   }
 
   Future<String?> requestCodeWindows() async {
     _code = null;
-    try {
-      final urlParams = _constructUrlParams();
-      webViewWindowsController.url.listen((url) async {
-        var uri = Uri.parse(url);
+    final urlParams = _constructUrlParams();
 
-        if (uri.queryParameters['error'] != null) {
+    final webView = InAppWebView(
+      initialUrlRequest:
+          URLRequest(url: WebUri("${_authorizationRequest.url}?$urlParams")),
+      onWebViewCreated: (controller) {
+        webViewWindowsController = controller;
+        webViewWindowsController.addJavaScriptHandler(
+          handlerName: 'onTextFieldFocus',
+          callback: (args) {
+            _config.whenTextFieldFocused?.call();
+          },
+        );
+        webViewWindowsController.addJavaScriptHandler(
+          handlerName: 'onTextFieldBlur',
+          callback: (args) {
+            _config.whenTextFieldUnfocused?.call();
+            _inputController.removeListener();
+          },
+        );
+      },
+      onLoadStop: (controller, url) {
+        _inputController.addListener(
+          () {
+            webViewWindowsController.evaluateJavascript(source: '''
+        var activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+          activeElement.value = ${_inputController.text};
+        }
+      ''');
+          },
+        );
+        if (url?.queryParameters['error'] != null) {
           _config.navigatorKey.currentState?.pop();
         }
 
-        var checkHost = uri.host == _redirectUriHost;
+        var checkHost = url?.host == _redirectUriHost;
 
-        if (uri.queryParameters['code'] != null && checkHost) {
-          _code = uri.queryParameters['code'];
+        if (url?.queryParameters['code'] != null && checkHost) {
+          _code = url?.queryParameters['code'];
           if (_config.onPageFinished != null) {
             _config.onPageFinished?.call(_code!);
           }
           _config.navigatorKey.currentState!.pop();
         }
-      });
-      webViewWindowsController
-          .loadUrl("${_authorizationRequest.url}?$urlParams");
-    } on PlatformException catch (e) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        throw Exception(e.message);
-      });
-    }
 
-    final webView = Webview(webViewWindowsController);
+        // Inject JavaScript to detect text field focus
+        controller.evaluateJavascript(source: '''
+          document.addEventListener('focusin', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+              console.log('Text field focused:', e.target);
+              window.flutter_inappwebview.callHandler('onTextFieldFocus', e.target.name);
+            }
+          });
+
+          document.addEventListener('focusout', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+              console.log('Text field blurred:', e.target);
+              window.flutter_inappwebview.callHandler('onTextFieldBlur', e.target.name);
+            }
+          });
+        ''');
+      },
+    );
 
     if (_config.navigatorKey.currentState == null) {
       throw Exception(
@@ -98,9 +136,21 @@ class RequestCode {
     return _code;
   }
 
+  void inputControllerListener() {
+    _inputController.addListener(
+      () {
+        webViewWindowsController.evaluateJavascript(source: '''
+        var activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+          activeElement.value = ${_inputController.text};
+        }
+      ''');
+      },
+    );
+  }
+
   Future clearCookiesWindows() async {
-    await webViewWindowsController.clearCookies();
-    await webViewWindowsController.clearCache();
+    await cookieManagerWindows.deleteAllCookies();
   }
 
   Future<String?> requestCode() async {
@@ -181,7 +231,7 @@ class RequestCode {
   }
 
   Future<void> clearCookies() async {
-    if (!Platform.isWindows) {
+    if (!(Platform.isWindows || Platform.isMacOS)) {
       await _cookieManager.clearCookies();
     } else {
       await clearCookiesWindows();

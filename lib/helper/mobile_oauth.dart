@@ -160,7 +160,7 @@ class MobileOAuth extends CoreOAuth {
 
   /// Authorize user via refresh token or web gui if necessary.
   Future<Either<Failure, Token>> _performFullAuthFlow() async {
-    var code = Platform.isWindows
+    var code = (Platform.isWindows || Platform.isMacOS)
         ? await _requestCode.requestCodeWindows()
         : await _requestCode.requestCode();
     if (code == null) {
@@ -180,7 +180,7 @@ class MobileOAuth extends CoreOAuth {
         await logout();
         await prefs.setBool(keyFreshInstall, false);
       }
-      if (Platform.isWindows && clearCookies) {
+      if ((Platform.isWindows || Platform.isMacOS) && clearCookies) {
         await _requestCode.clearCookiesWindows();
       }
     } catch (e, stacktrace) {
