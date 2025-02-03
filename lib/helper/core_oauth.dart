@@ -7,12 +7,17 @@ import 'package:aad_oauth/model/config.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/token.dart';
 import 'package:dartz/dartz.dart';
+import 'package:flutter/material.dart';
 
 class CoreOAuth {
   CoreOAuth();
 
   Future<Either<Failure, Token>> login(
-          {bool refreshIfAvailable = false, bool clearCookies = false}) async =>
+          {bool refreshIfAvailable = false,
+          bool clearCookies = false,
+          Function()? whenTextFieldFocused,
+          Function()? whenTextFieldUnfocused,
+          TextEditingController? textInputController}) async =>
       throw UnsupportedFailure(
           errorType: ErrorType.unsupported, message: 'Unsupported login');
 
@@ -45,7 +50,11 @@ class MockCoreOAuth extends CoreOAuth {
 
   @override
   Future<Either<Failure, Token>> login(
-          {bool refreshIfAvailable = false, bool clearCookies = false}) async =>
+          {bool refreshIfAvailable = false,
+          bool clearCookies = false,
+          Function()? whenTextFieldFocused,
+          Function()? whenTextFieldUnfocused,
+          TextEditingController? textInputController}) async =>
       Right(Token(accessToken: mockAccessToken));
 
   @override
