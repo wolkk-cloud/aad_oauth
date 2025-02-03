@@ -173,7 +173,7 @@ class Config {
   Function()? whenTextFieldUnfocused;
 
   /// Add trigger listener when virtual keyboard input
-  final TextEditingController textInputController;
+  TextEditingController? textInputController;
 
   /// add onPageFinished callback
   Function(String url)? onPageFinished;
@@ -235,7 +235,7 @@ class Config {
       this.onPageFinished,
       this.whenTextFieldFocused,
       this.whenTextFieldUnfocused,
-      required this.textInputController})
+      this.textInputController})
       : authorizationUrl = customAuthorizationUrl ??
             (isB2C
                 ? (customDomainUrlWithTenantId == null
@@ -289,7 +289,7 @@ class Config {
       Function(String url)? onPageFinished,
       Function()? whenTextFieldFocused,
       Function()? whenTextFieldUnfocused,
-      required TextEditingController textInputController}) {
+      TextEditingController? textInputController}) {
     return Config(
         tenant: tenant ?? this.tenant,
         policy: policy ?? this.policy,
@@ -331,6 +331,6 @@ class Config {
         whenTextFieldFocused: whenTextFieldFocused ?? this.whenTextFieldFocused,
         whenTextFieldUnfocused:
             whenTextFieldUnfocused ?? this.whenTextFieldUnfocused,
-        textInputController: textInputController);
+        textInputController: textInputController ?? this.textInputController);
   }
 }

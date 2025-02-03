@@ -18,7 +18,6 @@ class RequestCode {
   late CookieManager cookieManagerWindows;
   late final InAppWebViewController webViewWindowsController;
   String? _code;
-  late TextEditingController _inputController;
 
   RequestCode(Config config)
       : _config = config,
@@ -31,7 +30,6 @@ class RequestCode {
       _cookieManager = WebViewCookieManager();
     } else {
       cookieManagerWindows = CookieManager();
-      _inputController = _config.textInputController;
     }
   }
 
@@ -54,21 +52,10 @@ class RequestCode {
           handlerName: 'onTextFieldBlur',
           callback: (args) {
             _config.whenTextFieldUnfocused?.call();
-            _inputController.removeListener();
           },
         );
       },
       onLoadStop: (controller, url) {
-        _inputController.addListener(
-          () {
-            webViewWindowsController.evaluateJavascript(source: '''
-        var activeElement = document.activeElement;
-        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-          activeElement.value = ${_inputController.text};
-        }
-      ''');
-          },
-        );
         if (url?.queryParameters['error'] != null) {
           _config.navigatorKey.currentState?.pop();
         }
@@ -137,16 +124,13 @@ class RequestCode {
   }
 
   void inputControllerListener() {
-    _inputController.addListener(
-      () {
-        webViewWindowsController.evaluateJavascript(source: '''
-        var activeElement = document.activeElement;
+    if (_config.textInputController == null) return;
+    webViewWindowsController.evaluateJavascript(source: '''
+          var activeElement = document.activeElement;
         if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-          activeElement.value = ${_inputController.text};
+          activeElement.value = "${_config.textInputController?.text}";
         }
-      ''');
-      },
-    );
+        ''');
   }
 
   Future clearCookiesWindows() async {
