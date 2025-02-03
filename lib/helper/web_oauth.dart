@@ -12,6 +12,7 @@ import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/msalconfig.dart';
 import 'package:aad_oauth/model/token.dart';
 import 'package:dartz/dartz.dart';
+import 'package:flutter/material.dart';
 import 'package:js/js.dart';
 import 'package:js/js_util.dart';
 
@@ -96,7 +97,11 @@ class WebOAuth extends CoreOAuth {
 
   @override
   Future<Either<Failure, Token>> login(
-      {bool refreshIfAvailable = false, bool clearCookies = false}) async {
+      {bool refreshIfAvailable = false,
+      bool clearCookies = false,
+      Function()? whenTextFieldFocused,
+      Function()? whenTextFieldUnfocused,
+      TextEditingController? textInputController}) async {
     final completer = Completer<Either<Failure, Token>>();
 
     jsLogin(

@@ -33,7 +33,10 @@ class RequestCode {
     }
   }
 
-  Future<String?> requestCodeWindows() async {
+  Future<String?> requestCodeWindows(
+      {Function()? whenTextFieldFocused,
+      Function()? whenTextFieldUnfocused,
+      TextEditingController? textInputController}) async {
     _code = null;
     final urlParams = _constructUrlParams();
 
@@ -44,14 +47,21 @@ class RequestCode {
         webViewWindowsController = controller;
         webViewWindowsController.addJavaScriptHandler(
           handlerName: 'onTextFieldFocus',
-          callback: (args) {
-            _config.whenTextFieldFocused?.call();
+          callback: (args) async {
+            await updateTextInputController(textInputController);
+            whenTextFieldFocused?.call();
+            textInputController?.addListener(() {
+              inputControllerListener(textInputController);
+            });
           },
         );
         webViewWindowsController.addJavaScriptHandler(
           handlerName: 'onTextFieldBlur',
           callback: (args) {
-            _config.whenTextFieldUnfocused?.call();
+            whenTextFieldUnfocused?.call();
+            textInputController?.removeListener(() {
+              inputControllerListener(textInputController);
+            });
           },
         );
       },
@@ -123,14 +133,38 @@ class RequestCode {
     return _code;
   }
 
-  void inputControllerListener() {
-    if (_config.textInputController == null) return;
+  void inputControllerListener(TextEditingController? textInputController) {
+    if (textInputController == null) return;
     webViewWindowsController.evaluateJavascript(source: '''
-          var activeElement = document.activeElement;
+        var activeElement = document.activeElement;
         if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-          activeElement.value = "${_config.textInputController?.text}";
+          activeElement.value = "${textInputController.text}";
+          var event = new Event('input', { bubbles: true });
+          activeElement.dispatchEvent(event);
+          event = new Event('change', { bubbles: true });
+          activeElement.dispatchEvent(event);
         }
         ''');
+  }
+
+  Future<void> updateTextInputController(
+      TextEditingController? textInputController) async {
+    final value = await getActiveElementValue();
+    if (value != null && textInputController != null) {
+      textInputController.text = value;
+    } else {
+      textInputController?.clear();
+    }
+  }
+
+  Future<String?> getActiveElementValue() async {
+    return await webViewWindowsController.evaluateJavascript(source: '''
+      var activeElement = document.activeElement;
+      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+        return Promise.resolve(activeElement.value);
+      }
+      return null;
+    ''') as String?;
   }
 
   Future clearCookiesWindows() async {

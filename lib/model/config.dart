@@ -166,15 +166,6 @@ class Config {
   /// add an app bar to the login page
   PreferredSizeWidget? appBar;
 
-  /// Add trigger listener when focused on webview text field
-  Function()? whenTextFieldFocused;
-
-  /// Add trigger listener when unfocused on webview text field
-  Function()? whenTextFieldUnfocused;
-
-  /// Add trigger listener when virtual keyboard input
-  TextEditingController? textInputController;
-
   /// add onPageFinished callback
   Function(String url)? onPageFinished;
 
@@ -232,10 +223,7 @@ class Config {
       this.customParameters = const {},
       this.postLogoutRedirectUri,
       this.appBar,
-      this.onPageFinished,
-      this.whenTextFieldFocused,
-      this.whenTextFieldUnfocused,
-      this.textInputController})
+      this.onPageFinished})
       : authorizationUrl = customAuthorizationUrl ??
             (isB2C
                 ? (customDomainUrlWithTenantId == null
@@ -286,10 +274,7 @@ class Config {
       Map<String, String>? customParameters,
       String? postLogoutRedirectUri,
       PreferredSizeWidget? appBar,
-      Function(String url)? onPageFinished,
-      Function()? whenTextFieldFocused,
-      Function()? whenTextFieldUnfocused,
-      TextEditingController? textInputController}) {
+      Function(String url)? onPageFinished}) {
     return Config(
         tenant: tenant ?? this.tenant,
         policy: policy ?? this.policy,
@@ -327,10 +312,6 @@ class Config {
         postLogoutRedirectUri:
             postLogoutRedirectUri ?? this.postLogoutRedirectUri,
         appBar: appBar ?? this.appBar,
-        onPageFinished: onPageFinished ?? this.onPageFinished,
-        whenTextFieldFocused: whenTextFieldFocused ?? this.whenTextFieldFocused,
-        whenTextFieldUnfocused:
-            whenTextFieldUnfocused ?? this.whenTextFieldUnfocused,
-        textInputController: textInputController ?? this.textInputController);
+        onPageFinished: onPageFinished ?? this.onPageFinished);
   }
 }
