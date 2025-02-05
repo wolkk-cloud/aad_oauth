@@ -27,14 +27,12 @@ class AadOAuth {
   Future<Either<Failure, Token>> login(
           {bool refreshIfAvailable = false,
           bool clearCookies = false,
-          Function()? whenTextFieldFocused,
-          Function()? whenTextFieldUnfocused,
+          Widget? expandedWidget,
           TextEditingController? textInputController}) =>
       _coreOAuth.login(
           refreshIfAvailable: refreshIfAvailable,
           clearCookies: clearCookies,
-          whenTextFieldFocused: whenTextFieldFocused,
-          whenTextFieldUnfocused: whenTextFieldUnfocused,
+          expandedWidget: expandedWidget,
           textInputController: textInputController);
 
   /// Tries to silently login. will try to use the existing refresh token to get

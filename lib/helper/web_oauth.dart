@@ -99,8 +99,7 @@ class WebOAuth extends CoreOAuth {
   Future<Either<Failure, Token>> login(
       {bool refreshIfAvailable = false,
       bool clearCookies = false,
-      Function()? whenTextFieldFocused,
-      Function()? whenTextFieldUnfocused,
+      Widget? expandedWidget,
       TextEditingController? textInputController}) async {
     final completer = Completer<Either<Failure, Token>>();
 
