@@ -15,8 +15,7 @@ class CoreOAuth {
   Future<Either<Failure, Token>> login(
           {bool refreshIfAvailable = false,
           bool clearCookies = false,
-          Function()? whenTextFieldFocused,
-          Function()? whenTextFieldUnfocused,
+          Widget? expandedWidget,
           TextEditingController? textInputController}) async =>
       throw UnsupportedFailure(
           errorType: ErrorType.unsupported, message: 'Unsupported login');
@@ -52,8 +51,7 @@ class MockCoreOAuth extends CoreOAuth {
   Future<Either<Failure, Token>> login(
           {bool refreshIfAvailable = false,
           bool clearCookies = false,
-          Function()? whenTextFieldFocused,
-          Function()? whenTextFieldUnfocused,
+          Widget? expandedWidget,
           TextEditingController? textInputController}) async =>
       Right(Token(accessToken: mockAccessToken));
 

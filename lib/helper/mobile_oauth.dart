@@ -41,14 +41,12 @@ class MobileOAuth extends CoreOAuth {
   Future<Either<Failure, Token>> login(
       {bool refreshIfAvailable = false,
       bool clearCookies = false,
-      Function()? whenTextFieldFocused,
-      Function()? whenTextFieldUnfocused,
+      Widget? expandedWidget,
       TextEditingController? textInputController}) async {
     await _removeOldTokenOnFirstLogin(clearCookies: clearCookies);
     return await _authorization(
         refreshIfAvailable: refreshIfAvailable,
-        whenTextFieldFocused: whenTextFieldFocused,
-        whenTextFieldUnfocused: whenTextFieldUnfocused,
+        expandedWidget: expandedWidget,
         textInputController: textInputController);
   }
 
@@ -113,9 +111,17 @@ class MobileOAuth extends CoreOAuth {
   /// Perform Azure AD logout.
   @override
   Future<void> logout({bool showPopup = true, bool clearCookies = true}) async {
-    await _authStorage.clear();
-    if (clearCookies) {
-      await _requestCode.clearCookies();
+    try {
+      await _authStorage.clear();
+      if (clearCookies) {
+        if (Platform.isWindows) {
+          await _requestCode.clearCookiesWindows();
+        } else {
+          await _requestCode.clearCookies();
+        }
+      }
+    } catch (e, stacktrace) {
+      print("ERROR $e || $stacktrace");
     }
   }
 
@@ -132,8 +138,7 @@ class MobileOAuth extends CoreOAuth {
   /// both access and refresh tokens are invalid, the web gui will be used.
   Future<Either<Failure, Token>> _authorization(
       {bool refreshIfAvailable = false,
-      Function()? whenTextFieldFocused,
-      Function()? whenTextFieldUnfocused,
+      Widget? expandedWidget,
       TextEditingController? textInputController}) async {
     var token = await _authStorage.loadTokenFromCache();
 
@@ -156,8 +161,7 @@ class MobileOAuth extends CoreOAuth {
 
     if (!token.hasValidAccessToken()) {
       final result = await _performFullAuthFlow(
-          whenTextFieldFocused: whenTextFieldFocused,
-          whenTextFieldUnfocused: whenTextFieldUnfocused,
+          expandedWidget: expandedWidget,
           textInputController: textInputController);
       Failure? failure;
       result.fold(
@@ -175,13 +179,11 @@ class MobileOAuth extends CoreOAuth {
 
   /// Authorize user via refresh token or web gui if necessary.
   Future<Either<Failure, Token>> _performFullAuthFlow(
-      {Function()? whenTextFieldFocused,
-      Function()? whenTextFieldUnfocused,
+      {Widget? expandedWidget,
       TextEditingController? textInputController}) async {
     var code = (Platform.isWindows || Platform.isMacOS)
         ? await _requestCode.requestCodeWindows(
-            whenTextFieldFocused: whenTextFieldFocused,
-            whenTextFieldUnfocused: whenTextFieldUnfocused,
+            expandedWidget: expandedWidget,
             textInputController: textInputController)
         : await _requestCode.requestCode();
     if (code == null) {
@@ -197,7 +199,7 @@ class MobileOAuth extends CoreOAuth {
     try {
       var prefs = await SharedPreferences.getInstance();
       final keyFreshInstall = 'freshInstall';
-      if (!prefs.getKeys().contains(keyFreshInstall)) {
+      if (!prefs.getKeys().contains(keyFreshInstall) || clearCookies) {
         await logout();
         await prefs.setBool(keyFreshInstall, false);
       }

@@ -16,7 +16,7 @@ class RequestCode {
   late NavigationDelegate _navigationDelegate;
   late WebViewCookieManager _cookieManager;
   late CookieManager cookieManagerWindows;
-  late final InAppWebViewController webViewWindowsController;
+
   String? _code;
 
   RequestCode(Config config)
@@ -34,13 +34,14 @@ class RequestCode {
   }
 
   Future<String?> requestCodeWindows(
-      {Function()? whenTextFieldFocused,
-      Function()? whenTextFieldUnfocused,
+      {Widget? expandedWidget,
       TextEditingController? textInputController}) async {
     _code = null;
+    late final InAppWebViewController webViewWindowsController;
     final urlParams = _constructUrlParams();
 
     final webView = InAppWebView(
+      initialSettings: InAppWebViewSettings(incognito: true),
       initialUrlRequest:
           URLRequest(url: WebUri("${_authorizationRequest.url}?$urlParams")),
       onWebViewCreated: (controller) {
@@ -48,24 +49,26 @@ class RequestCode {
         webViewWindowsController.addJavaScriptHandler(
           handlerName: 'onTextFieldFocus',
           callback: (args) async {
-            await updateTextInputController(textInputController);
-            whenTextFieldFocused?.call();
+            textInputController?.clear();
             textInputController?.addListener(() {
-              inputControllerListener(textInputController);
+              inputControllerListener(
+                  textInputController: textInputController,
+                  webViewWindowsController: webViewWindowsController);
             });
           },
         );
         webViewWindowsController.addJavaScriptHandler(
           handlerName: 'onTextFieldBlur',
           callback: (args) {
-            whenTextFieldUnfocused?.call();
             textInputController?.removeListener(() {
-              inputControllerListener(textInputController);
+              inputControllerListener(
+                  textInputController: textInputController,
+                  webViewWindowsController: webViewWindowsController);
             });
           },
         );
       },
-      onLoadStop: (controller, url) {
+      onLoadStart: (controller, url) {
         if (url?.queryParameters['error'] != null) {
           _config.navigatorKey.currentState?.pop();
         }
@@ -77,9 +80,12 @@ class RequestCode {
           if (_config.onPageFinished != null) {
             _config.onPageFinished?.call(_code!);
           }
-          _config.navigatorKey.currentState!.pop();
+          if (_config.navigatorKey.currentState?.canPop() ?? false) {
+            _config.navigatorKey.currentState?.pop();
+          }
         }
-
+      },
+      onLoadStop: (controller, url) {
         // Inject JavaScript to detect text field focus
         controller.evaluateJavascript(source: '''
           document.addEventListener('focusin', function(e) {
@@ -110,30 +116,50 @@ class RequestCode {
 
     await _config.navigatorKey.currentState!.push(
       MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: _config.appBar,
-          body: PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (bool didPop, _) async {
-              if (didPop) return;
-              final NavigatorState navigator = Navigator.of(context);
-              if (navigator.canPop()) {
-                navigator.pop();
-              }
-            },
-            child: SafeArea(
-              child: Stack(
-                children: [_config.loader, webView],
+        builder: (context) {
+          bool isExpanded = false;
+          return StatefulBuilder(builder: (context, setState) {
+            return Scaffold(
+              appBar: _config.appBar,
+              body: PopScope(
+                canPop: false,
+                onPopInvokedWithResult: (bool didPop, _) async {
+                  if (didPop) return;
+                  final NavigatorState navigator = Navigator.of(context);
+                  if (navigator.canPop()) {
+                    navigator.pop();
+                  }
+                },
+                child: SafeArea(
+                  child: Stack(
+                    children: [_config.loader, webView],
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
+              bottomNavigationBar: isExpanded ? expandedWidget : null,
+              floatingActionButton: FloatingActionButton(
+                backgroundColor: Colors.black,
+                onPressed: () {
+                  setState(() {
+                    isExpanded = !isExpanded;
+                  });
+                },
+                child: Icon(
+                  isExpanded ? Icons.arrow_downward : Icons.arrow_upward,
+                  color: Colors.white,
+                ),
+              ),
+            );
+          });
+        },
       ),
     );
     return _code;
   }
 
-  void inputControllerListener(TextEditingController? textInputController) {
+  void inputControllerListener(
+      {TextEditingController? textInputController,
+      required InAppWebViewController webViewWindowsController}) {
     if (textInputController == null) return;
     webViewWindowsController.evaluateJavascript(source: '''
         var activeElement = document.activeElement;
@@ -145,26 +171,6 @@ class RequestCode {
           activeElement.dispatchEvent(event);
         }
         ''');
-  }
-
-  Future<void> updateTextInputController(
-      TextEditingController? textInputController) async {
-    final value = await getActiveElementValue();
-    if (value != null && textInputController != null) {
-      textInputController.text = value;
-    } else {
-      textInputController?.clear();
-    }
-  }
-
-  Future<String?> getActiveElementValue() async {
-    return await webViewWindowsController.evaluateJavascript(source: '''
-      var activeElement = document.activeElement;
-      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-        return Promise.resolve(activeElement.value);
-      }
-      return null;
-    ''') as String?;
   }
 
   Future clearCookiesWindows() async {
