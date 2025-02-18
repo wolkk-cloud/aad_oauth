@@ -115,7 +115,7 @@ class MobileOAuth extends CoreOAuth {
       await _authStorage.clear();
       if (clearCookies) {
         if (Platform.isWindows) {
-          await _requestCode.clearCookiesWindows();
+          // await _requestCode.clearCookiesWindows();
         } else {
           await _requestCode.clearCookies();
         }

@@ -29,7 +29,7 @@ class RequestCode {
       );
       _cookieManager = WebViewCookieManager();
     } else {
-      cookieManagerWindows = CookieManager();
+      cookieManagerWindows = CookieManager.instance();
     }
   }
 
@@ -41,7 +41,7 @@ class RequestCode {
     final urlParams = _constructUrlParams();
 
     final webView = InAppWebView(
-      initialSettings: InAppWebViewSettings(incognito: true),
+      initialSettings: InAppWebViewSettings(incognito: true, cacheMode: CacheMode.LOAD_NO_CACHE, cacheEnabled: false, clearSessionCache: true),
       initialUrlRequest:
           URLRequest(url: WebUri("${_authorizationRequest.url}?$urlParams")),
       onWebViewCreated: (controller) {
@@ -174,7 +174,12 @@ class RequestCode {
   }
 
   Future clearCookiesWindows() async {
+    try {
+     
     await cookieManagerWindows.deleteAllCookies();
+    } catch (e, stacktrace) {
+      print("ERROR $e || $stacktrace");
+    }
   }
 
   Future<String?> requestCode() async {
