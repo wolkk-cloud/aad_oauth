@@ -41,7 +41,11 @@ class RequestCode {
     final urlParams = _constructUrlParams();
 
     final webView = InAppWebView(
-      initialSettings: InAppWebViewSettings(incognito: true, cacheMode: CacheMode.LOAD_NO_CACHE, cacheEnabled: false, clearSessionCache: true),
+      initialSettings: InAppWebViewSettings(
+          incognito: true,
+          cacheMode: CacheMode.LOAD_NO_CACHE,
+          cacheEnabled: false,
+          clearSessionCache: true),
       initialUrlRequest:
           URLRequest(url: WebUri("${_authorizationRequest.url}?$urlParams")),
       onWebViewCreated: (controller) {
@@ -137,6 +141,8 @@ class RequestCode {
                 ),
               ),
               bottomNavigationBar: isExpanded ? expandedWidget : null,
+              floatingActionButtonLocation:
+                  FloatingActionButtonLocation.startFloat,
               floatingActionButton: FloatingActionButton(
                 backgroundColor: Colors.black,
                 onPressed: () {
@@ -175,8 +181,7 @@ class RequestCode {
 
   Future clearCookiesWindows() async {
     try {
-     
-    await cookieManagerWindows.deleteAllCookies();
+      await cookieManagerWindows.deleteAllCookies();
     } catch (e, stacktrace) {
       print("ERROR $e || $stacktrace");
     }
