@@ -59,6 +59,20 @@ class RequestCode {
                   textInputController: textInputController,
                   webViewWindowsController: webViewWindowsController);
             });
+            if (args.isNotEmpty) {
+              // Get the value of the focused text field from the JavaScript handler
+              final focusedValue = args[0] as String;
+
+              // Update the TextEditingController with the focused value only if it differs
+              if (textInputController != null &&
+                  textInputController.text != focusedValue) {
+                textInputController.value = TextEditingValue(
+                  text: focusedValue,
+                  selection:
+                      TextSelection.collapsed(offset: focusedValue.length),
+                );
+              }
+            }
           },
         );
         webViewWindowsController.addJavaScriptHandler(
@@ -95,14 +109,14 @@ class RequestCode {
           document.addEventListener('focusin', function(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
               console.log('Text field focused:', e.target);
-              window.flutter_inappwebview.callHandler('onTextFieldFocus', e.target.name);
+              window.flutter_inappwebview.callHandler('onTextFieldFocus', e.target.value);
             }
           });
 
           document.addEventListener('focusout', function(e) {
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
               console.log('Text field blurred:', e.target);
-              window.flutter_inappwebview.callHandler('onTextFieldBlur', e.target.name);
+              window.flutter_inappwebview.callHandler('onTextFieldBlur', e.target.value);
             }
           });
         ''');
