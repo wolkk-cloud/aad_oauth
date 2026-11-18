@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:aad_oauth/model/token.dart';
 import 'dart:convert' show jsonEncode, jsonDecode;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -35,6 +36,22 @@ class AuthStorage {
       Token.fromJson(data);
 
   Future clear() async {
-    await _secureStorage.delete(key: _tokenIdentifier);
+    if (Platform.isWindows) {
+      final chunkedKey = '\$${_tokenIdentifier}_chunk_size';
+
+      final chunkSize =
+          int.parse(await _secureStorage.read(key: chunkedKey) ?? '0');
+
+      if (chunkSize > 0) {
+        await Future.wait(List.generate(
+            chunkSize,
+            (i) async => await _secureStorage.delete(
+                key: '${_tokenIdentifier}_${i + 1}')));
+      } else {
+        await _secureStorage.delete(key: _tokenIdentifier);
+      }
+    } else {
+      await _secureStorage.delete(key: _tokenIdentifier);
+    }
   }
 }

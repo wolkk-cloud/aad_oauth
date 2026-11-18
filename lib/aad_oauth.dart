@@ -7,6 +7,7 @@ import 'package:aad_oauth/helper/core_oauth.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/token.dart';
 import 'package:dartz/dartz.dart';
+import 'package:flutter/material.dart';
 
 import 'model/config.dart';
 
@@ -23,8 +24,16 @@ class AadOAuth {
   /// still be valid. If there's no refresh token the existing access token
   /// will be returned, as long as we deem it still valid. In the event that
   /// both access and refresh tokens are invalid, the web gui will be used.
-  Future<Either<Failure, Token>> login({bool refreshIfAvailable = false}) =>
-      _coreOAuth.login(refreshIfAvailable: refreshIfAvailable);
+  Future<Either<Failure, Token>> login(
+          {bool refreshIfAvailable = false,
+          bool clearCookies = false,
+          Widget? expandedWidget,
+          TextEditingController? textInputController}) =>
+      _coreOAuth.login(
+          refreshIfAvailable: refreshIfAvailable,
+          clearCookies: clearCookies,
+          expandedWidget: expandedWidget,
+          textInputController: textInputController);
 
   /// Tries to silently login. will try to use the existing refresh token to get
   /// a new token.
@@ -37,7 +46,8 @@ class AadOAuth {
   Future<String?> getIdToken() async => _coreOAuth.getIdToken();
 
   /// Perform Azure AD logout.
-  Future<void> logout({bool showWebPopup = true, bool clearCookies = true}) async =>
+  Future<void> logout(
+          {bool showWebPopup = true, bool clearCookies = true}) async =>
       _coreOAuth.logout(showPopup: showWebPopup, clearCookies: clearCookies);
 
   /// Checks if MSAL has cached information

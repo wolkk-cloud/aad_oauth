@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+// import 'package:flutter/services.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:webview_windows/webview_windows.dart';
 
 import 'model/config.dart';
 import 'request/authorization_request.dart';
@@ -15,65 +15,113 @@ class RequestCode {
   final String _redirectUriHost;
   late NavigationDelegate _navigationDelegate;
   late WebViewCookieManager _cookieManager;
+  late CookieManager cookieManagerWindows;
+
   String? _code;
 
   RequestCode(Config config)
       : _config = config,
         _authorizationRequest = AuthorizationRequest(config),
         _redirectUriHost = Uri.parse(config.redirectUri).host {
-    if (!Platform.isWindows) {
+    if (!(Platform.isWindows || Platform.isMacOS)) {
       _navigationDelegate = NavigationDelegate(
         onNavigationRequest: _onNavigationRequest,
       );
       _cookieManager = WebViewCookieManager();
+    } else {
+      cookieManagerWindows = CookieManager.instance();
     }
   }
 
-  Future<String?> requestCodeWindows() async {
+  Future<String?> requestCodeWindows(
+      {Widget? expandedWidget,
+      TextEditingController? textInputController}) async {
     _code = null;
-    final controller = WebviewController();
+    late final InAppWebViewController webViewWindowsController;
+    final urlParams = _constructUrlParams();
 
-    try {
-      final urlParams = _constructUrlParams();
-      await controller.initialize();
-      controller.url.listen((url) async {
-        var uri = Uri.parse(url);
+    final webView = InAppWebView(
+      initialSettings: InAppWebViewSettings(
+          incognito: true,
+          cacheMode: CacheMode.LOAD_NO_CACHE,
+          cacheEnabled: false,
+          clearSessionCache: true),
+      initialUrlRequest:
+          URLRequest(url: WebUri("${_authorizationRequest.url}?$urlParams")),
+      onWebViewCreated: (controller) {
+        webViewWindowsController = controller;
+        webViewWindowsController.addJavaScriptHandler(
+          handlerName: 'onTextFieldFocus',
+          callback: (args) async {
+            textInputController?.clear();
+            textInputController?.addListener(() {
+              inputControllerListener(
+                  textInputController: textInputController,
+                  webViewWindowsController: webViewWindowsController);
+            });
+            if (args.isNotEmpty) {
+              // Get the value of the focused text field from the JavaScript handler
+              final focusedValue = args[0] as String;
 
-        if (uri.queryParameters['error'] != null) {
+              // Update the TextEditingController with the focused value only if it differs
+              if (textInputController != null &&
+                  textInputController.text != focusedValue) {
+                textInputController.value = TextEditingValue(
+                  text: focusedValue,
+                  selection:
+                      TextSelection.collapsed(offset: focusedValue.length),
+                );
+              }
+            }
+          },
+        );
+        webViewWindowsController.addJavaScriptHandler(
+          handlerName: 'onTextFieldBlur',
+          callback: (args) {
+            textInputController?.removeListener(() {
+              inputControllerListener(
+                  textInputController: textInputController,
+                  webViewWindowsController: webViewWindowsController);
+            });
+          },
+        );
+      },
+      onLoadStart: (controller, url) {
+        if (url?.queryParameters['error'] != null) {
           _config.navigatorKey.currentState?.pop();
         }
 
-        var checkHost = uri.host == _redirectUriHost;
+        var checkHost = url?.host == _redirectUriHost;
 
-        if (uri.queryParameters['code'] != null && checkHost) {
-          _code = uri.queryParameters['code'];
+        if (url?.queryParameters['code'] != null && checkHost) {
+          _code = url?.queryParameters['code'];
           if (_config.onPageFinished != null) {
             _config.onPageFinished?.call(_code!);
           }
-          _config.navigatorKey.currentState!.pop();
+          if (_config.navigatorKey.currentState?.canPop() ?? false) {
+            _config.navigatorKey.currentState?.pop();
+          }
         }
-      });
-      controller.loadUrl("${_authorizationRequest.url}?$urlParams").then(
-        (value) {
-          print('Page loaded');
-          String jsCode = """
-    document.querySelectorAll('input, textarea').forEach(function(element) {
-      element.addEventListener('focus', function() {
-        console.log('Input field tapped: ' + inputField.name || inputField.type);
-        window.flutter_inappwebview.callHandler('showKeyboard');
-      });
-    });
-  """;
-          controller.executeScript(jsCode);
-        },
-      );
-    } on PlatformException catch (e) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        throw Exception(e.message);
-      });
-    }
+      },
+      onLoadStop: (controller, url) {
+        // Inject JavaScript to detect text field focus
+        controller.evaluateJavascript(source: '''
+          document.addEventListener('focusin', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+              console.log('Text field focused:', e.target);
+              window.flutter_inappwebview.callHandler('onTextFieldFocus', e.target.value);
+            }
+          });
 
-    final webView = Webview(controller);
+          document.addEventListener('focusout', function(e) {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+              console.log('Text field blurred:', e.target);
+              window.flutter_inappwebview.callHandler('onTextFieldBlur', e.target.value);
+            }
+          });
+        ''');
+      },
+    );
 
     if (_config.navigatorKey.currentState == null) {
       throw Exception(
@@ -86,27 +134,71 @@ class RequestCode {
 
     await _config.navigatorKey.currentState!.push(
       MaterialPageRoute(
-        builder: (context) => Scaffold(
-          appBar: _config.appBar,
-          body: PopScope(
-            canPop: false,
-            onPopInvokedWithResult: (bool didPop, _) async {
-              if (didPop) return;
-              final NavigatorState navigator = Navigator.of(context);
-              if (navigator.canPop()) {
-                navigator.pop();
-              }
-            },
-            child: SafeArea(
-              child: Stack(
-                children: [_config.loader, webView],
+        builder: (context) {
+          bool isExpanded = false;
+          return StatefulBuilder(builder: (context, setState) {
+            return Scaffold(
+              appBar: _config.appBar,
+              body: PopScope(
+                canPop: false,
+                onPopInvokedWithResult: (bool didPop, _) async {
+                  if (didPop) return;
+                  final NavigatorState navigator = Navigator.of(context);
+                  if (navigator.canPop()) {
+                    navigator.pop();
+                  }
+                },
+                child: SafeArea(
+                  child: Stack(
+                    children: [_config.loader, webView],
+                  ),
+                ),
               ),
-            ),
-          ),
-        ),
+              bottomNavigationBar: isExpanded ? expandedWidget : null,
+              floatingActionButtonLocation:
+                  FloatingActionButtonLocation.startFloat,
+              floatingActionButton: FloatingActionButton(
+                backgroundColor: Colors.black,
+                onPressed: () {
+                  setState(() {
+                    isExpanded = !isExpanded;
+                  });
+                },
+                child: Icon(
+                  isExpanded ? Icons.arrow_downward : Icons.arrow_upward,
+                  color: Colors.white,
+                ),
+              ),
+            );
+          });
+        },
       ),
     );
     return _code;
+  }
+
+  void inputControllerListener(
+      {TextEditingController? textInputController,
+      required InAppWebViewController webViewWindowsController}) {
+    if (textInputController == null) return;
+    webViewWindowsController.evaluateJavascript(source: '''
+        var activeElement = document.activeElement;
+        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+          activeElement.value = "${textInputController.text}";
+          var event = new Event('input', { bubbles: true });
+          activeElement.dispatchEvent(event);
+          event = new Event('change', { bubbles: true });
+          activeElement.dispatchEvent(event);
+        }
+        ''');
+  }
+
+  Future clearCookiesWindows() async {
+    try {
+      await cookieManagerWindows.deleteAllCookies();
+    } catch (e, stacktrace) {
+      print("ERROR $e || $stacktrace");
+    }
   }
 
   Future<String?> requestCode() async {
@@ -187,8 +279,10 @@ class RequestCode {
   }
 
   Future<void> clearCookies() async {
-    if (!Platform.isWindows) {
+    if (!(Platform.isWindows || Platform.isMacOS)) {
       await _cookieManager.clearCookies();
+    } else {
+      await clearCookiesWindows();
     }
   }
 

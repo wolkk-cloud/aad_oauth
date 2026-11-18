@@ -6,6 +6,7 @@ import 'package:aad_oauth/model/config.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/token.dart';
 import 'package:dartz/dartz.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../request_code.dart';
@@ -38,9 +39,15 @@ class MobileOAuth extends CoreOAuth {
   /// both access and refresh tokens are invalid, the web gui will be used.
   @override
   Future<Either<Failure, Token>> login(
-      {bool refreshIfAvailable = false}) async {
-    await _removeOldTokenOnFirstLogin();
-    return await _authorization(refreshIfAvailable: refreshIfAvailable);
+      {bool refreshIfAvailable = false,
+      bool clearCookies = false,
+      Widget? expandedWidget,
+      TextEditingController? textInputController}) async {
+    await _removeOldTokenOnFirstLogin(clearCookies: clearCookies);
+    return await _authorization(
+        refreshIfAvailable: refreshIfAvailable,
+        expandedWidget: expandedWidget,
+        textInputController: textInputController);
   }
 
   /// Tries to silently login. will try to use the existing refresh token to get
@@ -104,9 +111,17 @@ class MobileOAuth extends CoreOAuth {
   /// Perform Azure AD logout.
   @override
   Future<void> logout({bool showPopup = true, bool clearCookies = true}) async {
-    await _authStorage.clear();
-    if (clearCookies) {
-      await _requestCode.clearCookies();
+    try {
+      await _authStorage.clear();
+      if (clearCookies) {
+        if (Platform.isWindows) {
+          // await _requestCode.clearCookiesWindows();
+        } else {
+          await _requestCode.clearCookies();
+        }
+      }
+    } catch (e, stacktrace) {
+      print("ERROR $e || $stacktrace");
     }
   }
 
@@ -122,7 +137,9 @@ class MobileOAuth extends CoreOAuth {
   /// will be returned, as long as we deem it still valid. In the event that
   /// both access and refresh tokens are invalid, the web gui will be used.
   Future<Either<Failure, Token>> _authorization(
-      {bool refreshIfAvailable = false}) async {
+      {bool refreshIfAvailable = false,
+      Widget? expandedWidget,
+      TextEditingController? textInputController}) async {
     var token = await _authStorage.loadTokenFromCache();
 
     if (!refreshIfAvailable) {
@@ -143,7 +160,9 @@ class MobileOAuth extends CoreOAuth {
     }
 
     if (!token.hasValidAccessToken()) {
-      final result = await _performFullAuthFlow();
+      final result = await _performFullAuthFlow(
+          expandedWidget: expandedWidget,
+          textInputController: textInputController);
       Failure? failure;
       result.fold(
         (l) => failure = l,
@@ -159,11 +178,14 @@ class MobileOAuth extends CoreOAuth {
   }
 
   /// Authorize user via refresh token or web gui if necessary.
-  Future<Either<Failure, Token>> _performFullAuthFlow() async {
-    final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-    var code = isDesktop
-        ? await _requestCode.requestCodeWindows()
-        : await _requestCode.requestCode(); 
+  Future<Either<Failure, Token>> _performFullAuthFlow(
+      {Widget? expandedWidget,
+      TextEditingController? textInputController}) async {
+    var code = (Platform.isWindows || Platform.isMacOS)
+        ? await _requestCode.requestCodeWindows(
+            expandedWidget: expandedWidget,
+            textInputController: textInputController)
+        : await _requestCode.requestCode();
     if (code == null) {
       return Left(AadOauthFailure(
         errorType: ErrorType.accessDeniedOrAuthenticationCanceled,
@@ -173,13 +195,16 @@ class MobileOAuth extends CoreOAuth {
     return await _requestToken.requestToken(code);
   }
 
-  Future<void> _removeOldTokenOnFirstLogin() async {
+  Future<void> _removeOldTokenOnFirstLogin({required bool clearCookies}) async {
     try {
       var prefs = await SharedPreferences.getInstance();
       final keyFreshInstall = 'freshInstall';
-      if (!prefs.getKeys().contains(keyFreshInstall)) {
+      if (!prefs.getKeys().contains(keyFreshInstall) || clearCookies) {
         await logout();
         await prefs.setBool(keyFreshInstall, false);
+      }
+      if ((Platform.isWindows || Platform.isMacOS) && clearCookies) {
+        await _requestCode.clearCookiesWindows();
       }
     } catch (e, stacktrace) {
       print("ERROR $e || $stacktrace");
