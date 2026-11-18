@@ -160,9 +160,10 @@ class MobileOAuth extends CoreOAuth {
 
   /// Authorize user via refresh token or web gui if necessary.
   Future<Either<Failure, Token>> _performFullAuthFlow() async {
-    var code = Platform.isWindows
+    final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    var code = isDesktop
         ? await _requestCode.requestCodeWindows()
-        : await _requestCode.requestCode();
+        : await _requestCode.requestCode(); 
     if (code == null) {
       return Left(AadOauthFailure(
         errorType: ErrorType.accessDeniedOrAuthenticationCanceled,

@@ -53,7 +53,20 @@ class RequestCode {
           _config.navigatorKey.currentState!.pop();
         }
       });
-      controller.loadUrl("${_authorizationRequest.url}?$urlParams");
+      controller.loadUrl("${_authorizationRequest.url}?$urlParams").then(
+        (value) {
+          print('Page loaded');
+          String jsCode = """
+    document.querySelectorAll('input, textarea').forEach(function(element) {
+      element.addEventListener('focus', function() {
+        console.log('Input field tapped: ' + inputField.name || inputField.type);
+        window.flutter_inappwebview.callHandler('showKeyboard');
+      });
+    });
+  """;
+          controller.executeScript(jsCode);
+        },
+      );
     } on PlatformException catch (e) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         throw Exception(e.message);
@@ -133,7 +146,7 @@ class RequestCode {
           appBar: _config.appBar,
           body: PopScope(
             canPop: false,
-            onPopInvoked: (bool didPop) async {
+            onPopInvokedWithResult: (bool didPop, _) async {
               if (didPop) return;
               if (await controller.canGoBack()) {
                 await controller.goBack();
