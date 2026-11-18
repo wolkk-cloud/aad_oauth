@@ -10,6 +10,9 @@ import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 
 import 'model/config.dart';
+import 'model/web_view_keyboard.dart';
+
+export 'model/web_view_keyboard.dart';
 
 /// Authenticates a user with Azure Active Directory using OAuth2.0.
 class AadOAuth {
@@ -28,11 +31,15 @@ class AadOAuth {
           {bool refreshIfAvailable = false,
           bool clearCookies = false,
           Widget? expandedWidget,
+          WebViewKeyboardBuilder? keyboardBuilder,
+          bool showKeyboardOnFocus = false,
           TextEditingController? textInputController}) =>
       _coreOAuth.login(
           refreshIfAvailable: refreshIfAvailable,
           clearCookies: clearCookies,
           expandedWidget: expandedWidget,
+          keyboardBuilder: keyboardBuilder,
+          showKeyboardOnFocus: showKeyboardOnFocus,
           textInputController: textInputController);
 
   /// Tries to silently login. will try to use the existing refresh token to get

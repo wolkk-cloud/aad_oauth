@@ -11,6 +11,7 @@ import 'package:aad_oauth/model/config.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/msalconfig.dart';
 import 'package:aad_oauth/model/token.dart';
+import 'package:aad_oauth/model/web_view_keyboard.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:js/js.dart';
@@ -100,6 +101,8 @@ class WebOAuth extends CoreOAuth {
       {bool refreshIfAvailable = false,
       bool clearCookies = false,
       Widget? expandedWidget,
+      WebViewKeyboardBuilder? keyboardBuilder,
+      bool showKeyboardOnFocus = false,
       TextEditingController? textInputController}) async {
     final completer = Completer<Either<Failure, Token>>();
 
