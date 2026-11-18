@@ -5,6 +5,7 @@ import 'package:aad_oauth/helper/core_oauth.dart';
 import 'package:aad_oauth/model/config.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/token.dart';
+import 'package:aad_oauth/model/web_view_keyboard.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,11 +43,15 @@ class MobileOAuth extends CoreOAuth {
       {bool refreshIfAvailable = false,
       bool clearCookies = false,
       Widget? expandedWidget,
+      WebViewKeyboardBuilder? keyboardBuilder,
+      bool showKeyboardOnFocus = false,
       TextEditingController? textInputController}) async {
     await _removeOldTokenOnFirstLogin(clearCookies: clearCookies);
     return await _authorization(
         refreshIfAvailable: refreshIfAvailable,
         expandedWidget: expandedWidget,
+        keyboardBuilder: keyboardBuilder,
+        showKeyboardOnFocus: showKeyboardOnFocus,
         textInputController: textInputController);
   }
 
@@ -139,6 +144,8 @@ class MobileOAuth extends CoreOAuth {
   Future<Either<Failure, Token>> _authorization(
       {bool refreshIfAvailable = false,
       Widget? expandedWidget,
+      WebViewKeyboardBuilder? keyboardBuilder,
+      bool showKeyboardOnFocus = false,
       TextEditingController? textInputController}) async {
     var token = await _authStorage.loadTokenFromCache();
 
@@ -162,6 +169,8 @@ class MobileOAuth extends CoreOAuth {
     if (!token.hasValidAccessToken()) {
       final result = await _performFullAuthFlow(
           expandedWidget: expandedWidget,
+          keyboardBuilder: keyboardBuilder,
+          showKeyboardOnFocus: showKeyboardOnFocus,
           textInputController: textInputController);
       Failure? failure;
       result.fold(
@@ -180,10 +189,14 @@ class MobileOAuth extends CoreOAuth {
   /// Authorize user via refresh token or web gui if necessary.
   Future<Either<Failure, Token>> _performFullAuthFlow(
       {Widget? expandedWidget,
+      WebViewKeyboardBuilder? keyboardBuilder,
+      bool showKeyboardOnFocus = false,
       TextEditingController? textInputController}) async {
     var code = (Platform.isWindows || Platform.isMacOS)
         ? await _requestCode.requestCodeWindows(
             expandedWidget: expandedWidget,
+            keyboardBuilder: keyboardBuilder,
+            showKeyboardOnFocus: showKeyboardOnFocus,
             textInputController: textInputController)
         : await _requestCode.requestCode();
     if (code == null) {
