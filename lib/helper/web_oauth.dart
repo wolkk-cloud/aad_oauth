@@ -5,16 +5,17 @@ library msauth;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:js_interop' hide JS;
 
 import 'package:aad_oauth/helper/core_oauth.dart';
 import 'package:aad_oauth/model/config.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/msalconfig.dart';
 import 'package:aad_oauth/model/token.dart';
+import 'package:aad_oauth/model/web_view_keyboard.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 import 'package:js/js.dart';
-import 'package:js/js_util.dart';
 
 @JS('init')
 external void jsInit(MsalConfig config);
@@ -23,30 +24,30 @@ external void jsInit(MsalConfig config);
 external void jsLogin(
   bool refreshIfAvailable,
   bool useRedirect,
-  void Function(dynamic) onSuccess,
-  void Function(dynamic) onError,
+  JSFunction onSuccess,
+  JSFunction onError,
 );
 
 @JS('logout')
 external void jsLogout(
-  void Function() onSuccess,
-  void Function(dynamic) onError,
+  JSFunction onSuccess,
+  JSFunction onError,
   bool showPopup,
 );
 
 @JS('getAccessToken')
-external Object jsGetAccessToken();
+external JSPromise<JSString?> jsGetAccessToken();
 
 @JS('getIdToken')
-external Object jsGetIdToken();
+external JSPromise<JSString?> jsGetIdToken();
 
 @JS('hasCachedAccountInformation')
 external bool jsHasCachedAccountInformation();
 
 @JS('refreshToken')
 external void jsRefreshToken(
-  void Function(dynamic) onSuccess,
-  void Function(dynamic) onError,
+  JSFunction onSuccess,
+  JSFunction onError,
 );
 
 class WebOAuth extends CoreOAuth {
@@ -83,12 +84,12 @@ class WebOAuth extends CoreOAuth {
 
   @override
   Future<String?> getAccessToken() async {
-    return promiseToFuture(jsGetAccessToken());
+    return (await jsGetAccessToken().toDart)?.toDart;
   }
 
   @override
   Future<String?> getIdToken() async {
-    return promiseToFuture(jsGetIdToken());
+    return (await jsGetIdToken().toDart)?.toDart;
   }
 
   @override
@@ -100,19 +101,21 @@ class WebOAuth extends CoreOAuth {
       {bool refreshIfAvailable = false,
       bool clearCookies = false,
       Widget? expandedWidget,
+      WebViewKeyboardBuilder? keyboardBuilder,
+      bool showKeyboardOnFocus = false,
       TextEditingController? textInputController}) async {
     final completer = Completer<Either<Failure, Token>>();
 
     jsLogin(
       refreshIfAvailable,
       config.webUseRedirect,
-      allowInterop(
-          (value) => completer.complete(Right(Token(accessToken: value)))),
-      allowInterop((error) => completer.complete(Left(AadOauthFailure(
+      ((JSString? value) =>
+          completer.complete(Right(Token(accessToken: value?.toDart)))).toJS,
+      ((JSAny? error) => completer.complete(Left(AadOauthFailure(
             errorType: ErrorType.accessDeniedOrAuthenticationCanceled,
             message:
                 'Access denied or authentication canceled. Error: ${error.toString()}',
-          )))),
+          )))).toJS,
     );
 
     return completer.future;
@@ -123,13 +126,13 @@ class WebOAuth extends CoreOAuth {
     final completer = Completer<Either<Failure, Token>>();
 
     jsRefreshToken(
-      allowInterop(
-          (value) => completer.complete(Right(Token(accessToken: value)))),
-      allowInterop((error) => completer.complete(Left(AadOauthFailure(
+      ((JSString? value) =>
+          completer.complete(Right(Token(accessToken: value?.toDart)))).toJS,
+      ((JSAny? error) => completer.complete(Left(AadOauthFailure(
             errorType: ErrorType.accessDeniedOrAuthenticationCanceled,
             message:
                 'Access denied or authentication canceled. Error: ${error.toString()}',
-          )))),
+          )))).toJS,
     );
 
     return completer.future;
@@ -140,8 +143,9 @@ class WebOAuth extends CoreOAuth {
     final completer = Completer<void>();
 
     jsLogout(
-      allowInterop(completer.complete),
-      allowInterop((error) => completer.completeError(error)),
+      (() => completer.complete()).toJS,
+      ((JSAny? error) => completer.completeError(error ?? 'Logout failed'))
+          .toJS,
       showPopup,
     );
 

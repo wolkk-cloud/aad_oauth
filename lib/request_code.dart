@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import 'model/config.dart';
+import 'model/web_view_keyboard.dart';
 import 'request/authorization_request.dart';
 
 class RequestCode {
@@ -35,10 +37,51 @@ class RequestCode {
 
   Future<String?> requestCodeWindows(
       {Widget? expandedWidget,
+      WebViewKeyboardBuilder? keyboardBuilder,
+      bool showKeyboardOnFocus = false,
       TextEditingController? textInputController}) async {
     _code = null;
-    late final InAppWebViewController webViewWindowsController;
+    InAppWebViewController? webController;
     final urlParams = _constructUrlParams();
+    final hasKeyboard = keyboardBuilder != null || expandedWidget != null;
+    final keyboardVisible = ValueNotifier<bool>(false);
+
+    // True while the controller is being filled from the web field, so that
+    // update is not written back into the page.
+    var syncingFromWeb = false;
+
+    void pushTextToWeb() {
+      final controller = webController;
+      final input = textInputController;
+      if (controller == null || input == null || syncingFromWeb) return;
+      controller.evaluateJavascript(
+          source: _setActiveInputValueJs(jsonEncode(input.text)));
+    }
+
+    void submitWebForm() {
+      webController?.evaluateJavascript(source: _submitActiveFormJs);
+    }
+
+    void onTextFieldFocus(List<dynamic> args) {
+      final input = textInputController;
+      if (input != null) {
+        final focusedValue =
+            args.isNotEmpty && args[0] is String ? args[0] as String : '';
+        syncingFromWeb = true;
+        input.value = TextEditingValue(
+          text: focusedValue,
+          selection: TextSelection.collapsed(offset: focusedValue.length),
+        );
+        syncingFromWeb = false;
+      }
+      if (showKeyboardOnFocus && hasKeyboard) {
+        keyboardVisible.value = true;
+      }
+    }
+
+    // A single listener for the whole login flow, removed when the route is
+    // closed. It writes into whichever text input is focused in the page.
+    textInputController?.addListener(pushTextToWeb);
 
     final webView = InAppWebView(
       initialSettings: InAppWebViewSettings(
@@ -49,41 +92,10 @@ class RequestCode {
       initialUrlRequest:
           URLRequest(url: WebUri("${_authorizationRequest.url}?$urlParams")),
       onWebViewCreated: (controller) {
-        webViewWindowsController = controller;
-        webViewWindowsController.addJavaScriptHandler(
+        webController = controller;
+        controller.addJavaScriptHandler(
           handlerName: 'onTextFieldFocus',
-          callback: (args) async {
-            textInputController?.clear();
-            textInputController?.addListener(() {
-              inputControllerListener(
-                  textInputController: textInputController,
-                  webViewWindowsController: webViewWindowsController);
-            });
-            if (args.isNotEmpty) {
-              // Get the value of the focused text field from the JavaScript handler
-              final focusedValue = args[0] as String;
-
-              // Update the TextEditingController with the focused value only if it differs
-              if (textInputController != null &&
-                  textInputController.text != focusedValue) {
-                textInputController.value = TextEditingValue(
-                  text: focusedValue,
-                  selection:
-                      TextSelection.collapsed(offset: focusedValue.length),
-                );
-              }
-            }
-          },
-        );
-        webViewWindowsController.addJavaScriptHandler(
-          handlerName: 'onTextFieldBlur',
-          callback: (args) {
-            textInputController?.removeListener(() {
-              inputControllerListener(
-                  textInputController: textInputController,
-                  webViewWindowsController: webViewWindowsController);
-            });
-          },
+          callback: onTextFieldFocus,
         );
       },
       onLoadStart: (controller, url) {
@@ -104,26 +116,13 @@ class RequestCode {
         }
       },
       onLoadStop: (controller, url) {
-        // Inject JavaScript to detect text field focus
-        controller.evaluateJavascript(source: '''
-          document.addEventListener('focusin', function(e) {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-              console.log('Text field focused:', e.target);
-              window.flutter_inappwebview.callHandler('onTextFieldFocus', e.target.value);
-            }
-          });
-
-          document.addEventListener('focusout', function(e) {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-              console.log('Text field blurred:', e.target);
-              window.flutter_inappwebview.callHandler('onTextFieldBlur', e.target.value);
-            }
-          });
-        ''');
+        controller.evaluateJavascript(source: _textFieldFocusJs);
       },
     );
 
     if (_config.navigatorKey.currentState == null) {
+      textInputController?.removeListener(pushTextToWeb);
+      keyboardVisible.dispose();
       throw Exception(
         'Could not push new route using provided navigatorKey, Because '
         'NavigatorState returned from provided navigatorKey is null. Please Make sure '
@@ -132,66 +131,123 @@ class RequestCode {
       );
     }
 
-    await _config.navigatorKey.currentState!.push(
-      MaterialPageRoute(
-        builder: (context) {
-          bool isExpanded = false;
-          return StatefulBuilder(builder: (context, setState) {
-            return Scaffold(
-              appBar: _config.appBar,
-              body: PopScope(
-                canPop: false,
-                onPopInvokedWithResult: (bool didPop, _) async {
-                  if (didPop) return;
-                  final NavigatorState navigator = Navigator.of(context);
-                  if (navigator.canPop()) {
-                    navigator.pop();
-                  }
-                },
-                child: SafeArea(
-                  child: Stack(
-                    children: [_config.loader, webView],
+    try {
+      await _config.navigatorKey.currentState!.push(
+        MaterialPageRoute(
+          builder: (context) {
+            return ValueListenableBuilder<bool>(
+              valueListenable: keyboardVisible,
+              builder: (context, isExpanded, _) {
+                return Scaffold(
+                  appBar: _config.appBar,
+                  body: PopScope(
+                    canPop: false,
+                    onPopInvokedWithResult: (bool didPop, _) async {
+                      if (didPop) return;
+                      final NavigatorState navigator = Navigator.of(context);
+                      if (navigator.canPop()) {
+                        navigator.pop();
+                      }
+                    },
+                    child: SafeArea(
+                      child: Stack(
+                        children: [_config.loader, webView],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              bottomNavigationBar: isExpanded ? expandedWidget : null,
-              floatingActionButtonLocation:
-                  FloatingActionButtonLocation.startFloat,
-              floatingActionButton: FloatingActionButton(
-                backgroundColor: Colors.black,
-                onPressed: () {
-                  setState(() {
-                    isExpanded = !isExpanded;
-                  });
-                },
-                child: Icon(
-                  isExpanded ? Icons.arrow_downward : Icons.arrow_upward,
-                  color: Colors.white,
-                ),
-              ),
+                  bottomNavigationBar: isExpanded
+                      ? (keyboardBuilder?.call(context, submitWebForm) ??
+                          expandedWidget)
+                      : null,
+                  floatingActionButtonLocation:
+                      FloatingActionButtonLocation.startFloat,
+                  floatingActionButton: hasKeyboard
+                      ? FloatingActionButton(
+                          backgroundColor: Colors.black,
+                          onPressed: () =>
+                              keyboardVisible.value = !keyboardVisible.value,
+                          child: Icon(
+                            isExpanded
+                                ? Icons.arrow_downward
+                                : Icons.arrow_upward,
+                            color: Colors.white,
+                          ),
+                        )
+                      : null,
+                );
+              },
             );
-          });
-        },
-      ),
-    );
+          },
+        ),
+      );
+    } finally {
+      textInputController?.removeListener(pushTextToWeb);
+      webController = null;
+      keyboardVisible.dispose();
+    }
     return _code;
   }
 
-  void inputControllerListener(
-      {TextEditingController? textInputController,
-      required InAppWebViewController webViewWindowsController}) {
-    if (textInputController == null) return;
-    webViewWindowsController.evaluateJavascript(source: '''
-        var activeElement = document.activeElement;
-        if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
-          activeElement.value = "${textInputController.text}";
-          var event = new Event('input', { bubbles: true });
-          activeElement.dispatchEvent(event);
-          event = new Event('change', { bubbles: true });
-          activeElement.dispatchEvent(event);
-        }
-        ''');
+  /// Reports focused text inputs to the `onTextFieldFocus` handler.
+  ///
+  /// Installed once per document. Blur is deliberately not tracked: tapping
+  /// the Flutter keyboard blurs the web view, but the input must keep
+  /// receiving text. Writes always target `document.activeElement` instead.
+  static const _textFieldFocusJs = r"""
+(function() {
+  if (window.__aadKeyboardInstalled) return;
+  window.__aadKeyboardInstalled = true;
+  var textTypes = ['', 'text', 'email', 'password', 'tel', 'number', 'search', 'url'];
+  function isTextInput(el) {
+    if (!el) return false;
+    if (el.tagName === 'TEXTAREA') return true;
+    return el.tagName === 'INPUT' &&
+      textTypes.indexOf((el.getAttribute('type') || '').toLowerCase()) !== -1;
   }
+  function report(el) {
+    window.flutter_inappwebview.callHandler('onTextFieldFocus', el.value || '');
+  }
+  document.addEventListener('focusin', function(e) {
+    if (isTextInput(e.target)) report(e.target);
+  });
+  // The page may autofocus an input before this script runs.
+  if (isTextInput(document.activeElement)) report(document.activeElement);
+})();
+""";
+
+  /// Sets the focused text input to [jsonValue] (a JSON string literal) and
+  /// fires the events the page's bindings listen to.
+  static String _setActiveInputValueJs(String jsonValue) => """
+(function() {
+  var el = document.activeElement;
+  if (!el || (el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA')) return;
+  var value = $jsonValue;
+  if (el.value === value) return;
+  var proto = el.tagName === 'INPUT'
+    ? window.HTMLInputElement.prototype
+    : window.HTMLTextAreaElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+})();
+""";
+
+  /// Presses the page's primary submit button ("Next" / "Sign in" / "Yes" on
+  /// the Microsoft login page), falling back to submitting the focused form.
+  static const _submitActiveFormJs = r"""
+(function() {
+  var el = document.activeElement;
+  var form = el && el.form;
+  var button = document.getElementById('idSIButton9') ||
+    (form && form.querySelector('input[type=submit], button[type=submit]')) ||
+    document.querySelector('input[type=submit], button[type=submit]');
+  if (button && !button.disabled) {
+    button.click();
+  } else if (form) {
+    if (form.requestSubmit) { form.requestSubmit(); } else { form.submit(); }
+  }
+})();
+""";
 
   Future clearCookiesWindows() async {
     try {
@@ -238,7 +294,7 @@ class RequestCode {
           appBar: _config.appBar,
           body: PopScope(
             canPop: false,
-            onPopInvoked: (bool didPop) async {
+            onPopInvokedWithResult: (bool didPop, _) async {
               if (didPop) return;
               if (await controller.canGoBack()) {
                 await controller.goBack();

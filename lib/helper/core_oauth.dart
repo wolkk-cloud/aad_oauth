@@ -6,6 +6,7 @@ import 'package:aad_oauth/helper/choose_oauth.dart'
 import 'package:aad_oauth/model/config.dart';
 import 'package:aad_oauth/model/failure.dart';
 import 'package:aad_oauth/model/token.dart';
+import 'package:aad_oauth/model/web_view_keyboard.dart';
 import 'package:dartz/dartz.dart';
 import 'package:flutter/material.dart';
 
@@ -16,6 +17,8 @@ class CoreOAuth {
           {bool refreshIfAvailable = false,
           bool clearCookies = false,
           Widget? expandedWidget,
+          WebViewKeyboardBuilder? keyboardBuilder,
+          bool showKeyboardOnFocus = false,
           TextEditingController? textInputController}) async =>
       throw UnsupportedFailure(
           errorType: ErrorType.unsupported, message: 'Unsupported login');
@@ -52,6 +55,8 @@ class MockCoreOAuth extends CoreOAuth {
           {bool refreshIfAvailable = false,
           bool clearCookies = false,
           Widget? expandedWidget,
+          WebViewKeyboardBuilder? keyboardBuilder,
+          bool showKeyboardOnFocus = false,
           TextEditingController? textInputController}) async =>
       Right(Token(accessToken: mockAccessToken));
 
